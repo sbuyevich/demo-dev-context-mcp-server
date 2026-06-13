@@ -7,4 +7,9 @@
     <RootNamespace>STI.City.Core</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Demo.Cities" Version="1.1.0" />
+    <PackageReference Include="OpenMeteo.Api.Client" Version="1.0.0" />
+  </ItemGroup>
+
 </Project>

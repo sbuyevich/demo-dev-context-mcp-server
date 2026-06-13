@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using OpenMeteo.Api.Client;
 using Serilog;
 using STI.City.API.Configuration;
+using STI.City.Core;
 using STI.City.Data;
 using STI.City.Data.Geocoding;
 
@@ -19,6 +20,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddDemoCities();
 builder.Services.AddOpenMeteoApiClient();
+builder.Services.AddCityCore();
 builder.Services.AddCityData();
 builder.Services.AddSerilog((services, configuration) => configuration
     .ReadFrom.Configuration(builder.Configuration)

@@ -7,7 +7,9 @@ required HTTP contracts.
 
 ## Dependencies
 
-- Stage 2 and Stage 3 exit criteria must pass.
+- Stage 3 is complete.
+- Map the four `CityGeocodingOutcome` values documented in the Stage 3 plan
+  to the HTTP contracts in `design/spec.md`.
 
 ## Work
 
