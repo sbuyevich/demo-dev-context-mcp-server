@@ -9,6 +9,12 @@ architecture and has the required configuration and dependency registrations.
 
 - Stage 0 is complete.
 
+## Implementation Status
+
+**Complete.** The .NET 10 solution, project references, package sources,
+configuration validation, dependency injection registrations, Serilog setup,
+empty `/city` route group, and startup tests are implemented.
+
 ## Project Structure
 
 Create a `City` solution containing:
@@ -30,19 +36,21 @@ Architecture source: `docs://company-docs/api.architecture.md`.
 
 ## Work
 
-- Create the .NET 10 `City` solution and the four `STI.City.*` projects above.
-- Add project references exactly as defined in the project structure table.
-- Configure the QA and production NuGet sources as required.
-- Add the verified package versions.
-- Add `Microsoft.Data.Sqlite` 10.0.9 and an explicit `Dapper` 2.1.35
+- [x] Create the .NET 10 `City` solution and the four `STI.City.*` projects
+  above.
+- [x] Add project references exactly as defined in the project structure
+  table.
+- [x] Configure the QA and production NuGet sources as required.
+- [x] Add the verified package versions.
+- [x] Add `Microsoft.Data.Sqlite` 10.0.9 and an explicit `Dapper` 2.1.35
   reference for provider SQL used inside the SimpleRepo-derived repository.
-- Create the ASP.NET Core Minimal API host with
+- [x] Create the ASP.NET Core Minimal API host with
   `WebApplication.CreateBuilder`.
-- Expose `Program` to the integration test project.
-- Add `ConnectionStrings:CityCache` configuration and fail startup when it is
-  missing or blank.
-- Register Problem Details, `TimeProvider.System`, and the verified package
-  dependency-injection extensions.
+- [x] Expose `Program` to the integration test project.
+- [x] Add `ConnectionStrings:CityCache` configuration and fail startup when
+  it is missing or blank.
+- [x] Register Problem Details, `TimeProvider.System`, and the verified
+  package dependency-injection extensions.
 
 ## Deliverables
 
@@ -52,7 +60,15 @@ Architecture source: `docs://company-docs/api.architecture.md`.
 
 ## Exit Criteria
 
-- `dotnet restore` succeeds from the configured package sources.
-- `dotnet build` succeeds with no package or project-reference errors.
-- A host smoke test starts the application with valid configuration.
-- A startup test proves missing cache configuration fails fast.
+- [x] `dotnet restore` succeeds from the configured package sources.
+- [x] `dotnet build` succeeds with no warnings, package errors, or
+  project-reference errors.
+- [x] A host smoke test starts the application with valid configuration.
+- [x] Startup tests prove missing and blank cache configuration fail fast.
+
+## Verification
+
+- .NET SDK: 10.0.301
+- Restore: succeeded for all four projects.
+- Build: succeeded with zero warnings and zero errors.
+- Tests: 3 passed, 0 failed.
