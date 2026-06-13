@@ -79,27 +79,28 @@ documented change:
 | --- | --- | --- | --- |
 | `Demo.Cities` | QA | `1.1.0` | Global and U.S. city lists |
 | `OpenMeteo.Api.Client` | Production | `1.0.0` | Open-Meteo geocoding client |
-| `Formula.SimpleRepo` | Public | `2.8.1` recommended | SQLite data access |
+| `Formula.SimpleRepo` | Public | `2.8.1` | Repository access; `net8.0` package asset verified compatible with `net10.0` |
+| `Microsoft.Data.Sqlite` | Public | `10.0.9` | SQLite provider |
+| `Dapper` | Public | `2.1.35` | Schema and atomic SQLite upsert inside the SimpleRepo repository |
 | `Microsoft.AspNetCore.Mvc.Testing` | Public | .NET 10 compatible | HTTP integration tests |
 
 Register package services through each package's dependency-injection
 extensions. Do not manually construct package service implementations or the
 Open-Meteo HTTP client.
 
-### Package API verification gates
+### Package API verification status
 
-Before implementation, use DevContext to verify and cite:
+The `Demo.Cities` and `OpenMeteo.Api.Client` contracts are verified.
+`Formula.SimpleRepo` query and CRUD contracts are verified against its
+`net8.0` asset. A temporary `net10.0` project restored and built successfully
+with Formula.SimpleRepo 2.8.1, so target-framework compatibility is confirmed
+and is not a blocker. `SimpleCRUD.Dialect.SQLite`, transient repository
+registration, provider-level schema initialization, and an atomic SQLite
+`ON CONFLICT` upsert inside the SimpleRepo-derived repository are also
+resolved. See
+`design/stages/stage-0-resolve-architecture-and-package-apis/evidence.md`.
 
-1. The exact DI extension method for `Demo.Cities` 1.1.0.
-2. The exact DI extension and geocoding method on
-   `OpenMeteo.Api.Client.IOpenMeteoClient` 1.0.0, including request,
-   response, nullable field, cancellation, and exception contracts.
-3. The exact `Formula.SimpleRepo` 2.8.1 APIs for SQLite registration,
-   connection lifetime, asynchronous query, insert/upsert, and schema
-   initialization.
-
-Implementation must stop rather than infer an API if DevContext returns
-`not_found`, `not_ready`, or `insufficient_evidence`.
+The company architecture standard remains the only Stage 0 blocker.
 
 The verified `Demo.Cities` contracts are:
 
@@ -117,6 +118,29 @@ public interface IUsaCityService
 
 Both methods document that their returned names are already in alphabetical
 order.
+
+Register these services with:
+
+```csharp
+builder.Services.AddDemoCities();
+```
+
+The verified Open-Meteo registration and operation are:
+
+```csharp
+builder.Services.AddOpenMeteoApiClient();
+
+Task<GeocodingResponse> SearchLocationsAsync(
+    string name,
+    int? count,
+    string language,
+    Format? format,
+    CancellationToken cancellationToken);
+```
+
+`GeocodingResponse.Results` is an `ICollection<LocationResult>`.
+`LocationResult` exposes `Name`, `Country`, `Latitude`, `Longitude`, and
+nullable `int` `Population`. API failures use `ApiException`.
 
 ## 5. Configuration
 
@@ -321,10 +345,11 @@ The application geocoding service must:
 Both detail endpoints must call this same application service method. They
 must not maintain separate location and population caches.
 
-Use an atomic insert/upsert compatible with the table's primary key so
-concurrent misses cannot create duplicate rows. Duplicate upstream calls
-during a simultaneous first lookup are acceptable, but all callers must
-converge on one valid cache record.
+Execute an atomic SQLite
+`INSERT ... ON CONFLICT(NormalizedCityName) DO UPDATE` statement through
+Dapper inside the SimpleRepo-derived repository. The primary key and atomic
+statement ensure concurrent misses converge on one valid cache record.
+Duplicate upstream calls during a simultaneous first lookup are acceptable.
 
 ### 8.3 Failure behavior
 
@@ -358,8 +383,7 @@ Recommended lifetimes:
 
 - package registrations: use their documented lifetimes;
 - `CityGeocodingService`: scoped;
-- cache repository: scoped unless `Formula.SimpleRepo` documents another
-  required lifetime;
+- SimpleRepo repository: transient, matching `AddRepositoryByType`;
 - `TimeProvider.System`: singleton.
 
 The route handlers must not contain SQL, package response traversal, or
@@ -454,6 +478,30 @@ Implementation is complete when:
   `nuget://qa/Demo.Cities/1.1.0/symbol/Demo.Cities.IUsaCityService`
 - `Demo.Cities.IUsaCityService.GetCityNames`:
   `nuget://qa/Demo.Cities/1.1.0/symbol/Demo.Cities.IUsaCityService.GetCityNames`
+- `Demo.Cities.ServiceCollectionExtensions.AddDemoCities`:
+  `nuget://qa/Demo.Cities/1.1.0/symbol/Demo.Cities.ServiceCollectionExtensions.AddDemoCities`
+- `OpenMeteo.Api.Client.ServiceCollectionExtensions.AddOpenMeteoApiClient`:
+  `nuget://prod/OpenMeteo.Api.Client/1.0.0/symbol/OpenMeteo.Api.Client.ServiceCollectionExtensions.AddOpenMeteoApiClient`
+- `OpenMeteo.Api.Client.IOpenMeteoClient.SearchLocationsAsync`:
+  `nuget://prod/OpenMeteo.Api.Client/1.0.0/symbol/OpenMeteo.Api.Client.IOpenMeteoClient.SearchLocationsAsync`
+- `OpenMeteo.Api.Client.GeocodingResponse.Results`:
+  `nuget://prod/OpenMeteo.Api.Client/1.0.0/symbol/OpenMeteo.Api.Client.GeocodingResponse.Results`
+- `OpenMeteo.Api.Client.LocationResult`:
+  `nuget://prod/OpenMeteo.Api.Client/1.0.0/symbol/OpenMeteo.Api.Client.LocationResult`
+- `OpenMeteo.Api.Client.ApiException`:
+  `nuget://prod/OpenMeteo.Api.Client/1.0.0/symbol/OpenMeteo.Api.Client.ApiException`
+- `Formula.SimpleRepo.RepositoryBase<TModel,TConstraints>`:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.RepositoryBase%602`
+- `Formula.SimpleRepo.ConnectionDetails` constructor:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.ConnectionDetails.ConnectionDetails`
+- `Formula.SimpleRepo.RepositoryConfiguration.AddRepositoriesInAssembly`:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.RepositoryConfiguration.AddRepositoriesInAssembly`
+- `Formula.SimpleRepo.IReadOnlyRepository.GetAsync`:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.IReadOnlyRepository%601.GetAsync`
+- `Formula.SimpleRepo.RepositoryBase.InsertAsync`:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.RepositoryBase%602.InsertAsync`
+- `Formula.SimpleRepo.RepositoryBase.UpdateAsync`:
+  `nuget://public/Formula.SimpleRepo/2.8.1/symbol/Formula.SimpleRepo.RepositoryBase%602.UpdateAsync`
 - ASP.NET Core Minimal APIs:
   <https://learn.microsoft.com/aspnet/core/fundamentals/minimal-apis>
 - ASP.NET Core integration testing:
@@ -461,8 +509,9 @@ Implementation is complete when:
 - ASP.NET Core error handling:
   <https://learn.microsoft.com/aspnet/core/fundamentals/error-handling-api>
 
-DevContext returned `insufficient_evidence` for the company API architecture
-standard and for the detailed `Formula.SimpleRepo` API. Exact project
-structure and SimpleRepo calls therefore remain explicit verification gates
-and are not inferred here. The exact `OpenMeteo.Api.Client` API also remains a
-verification gate until supported by indexed evidence.
+DevContext still returns `insufficient_evidence` for the company API
+architecture standard. SimpleRepo's core repository APIs are indexed when
+queried for its `net8.0` package asset, which is verified compatible with the
+City API's `net10.0` target. Its SQLite dialect, transient registration,
+provider-level schema creation, and repository-contained atomic upsert
+approach are resolved in the Stage 0 evidence.
