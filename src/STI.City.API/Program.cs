@@ -1,7 +1,10 @@
 using Demo.Cities;
+using Microsoft.Extensions.Options;
 using OpenMeteo.Api.Client;
 using Serilog;
 using STI.City.API.Configuration;
+using STI.City.Data;
+using STI.City.Data.Geocoding;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +19,7 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddDemoCities();
 builder.Services.AddOpenMeteoApiClient();
+builder.Services.AddCityData();
 builder.Services.AddSerilog((services, configuration) => configuration
     .ReadFrom.Configuration(builder.Configuration)
     .ReadFrom.Services(services)
@@ -23,6 +27,11 @@ builder.Services.AddSerilog((services, configuration) => configuration
     .WriteTo.Console());
 
 var app = builder.Build();
+
+_ = app.Services.GetRequiredService<IOptions<CityCacheOptions>>().Value;
+await app.Services
+    .GetRequiredService<ICityCacheSchemaInitializer>()
+    .InitializeAsync();
 
 if (!app.Environment.IsDevelopment())
 {

@@ -10,12 +10,35 @@ public sealed class StartupTests
     [Fact]
     public async Task Host_starts_with_valid_configuration()
     {
-        await using var factory = new WebApplicationFactory<Program>();
-        using var client = factory.CreateClient();
+        var databasePath =
+            Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.db");
+        var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.ConfigureAppConfiguration((_, configuration) =>
+                {
+                    configuration.AddInMemoryCollection(
+                        new Dictionary<string, string?>
+                        {
+                            ["ConnectionStrings:CityCache"] =
+                                $"Data Source={databasePath};Pooling=False"
+                        });
+                });
+            });
 
-        using var response = await client.GetAsync("/city");
+        try
+        {
+            using var client = factory.CreateClient();
+            using var response = await client.GetAsync("/city");
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            await factory.DisposeAsync();
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            File.Delete(databasePath);
+        }
     }
 
     [Theory]

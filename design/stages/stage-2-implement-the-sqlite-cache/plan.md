@@ -11,17 +11,37 @@ SQLite and verified `Formula.SimpleRepo` APIs.
 - Repository interfaces must be coordinated with Stage 3 before parallel work
   begins.
 
+## Implementation Status
+
+**Complete.** The Core cache contract, SimpleRepo-backed SQLite repository,
+idempotent startup schema initialization, atomic upsert, dependency injection,
+and isolated repository integration tests are implemented.
+
+The agreed Stage 3 repository contract is:
+
+```csharp
+Task<GeocodingCacheRecord?> GetAsync(
+    string normalizedCityName,
+    CancellationToken cancellationToken = default);
+
+Task UpsertAsync(
+    GeocodingCacheRecord record,
+    CancellationToken cancellationToken = default);
+```
+
 ## Work
 
-- Define `GeocodingCacheRecord` with normalized city name, display name,
+- [x] Define `GeocodingCacheRecord` with normalized city name, display name,
   country, latitude, longitude, nullable population, and retrieval timestamp.
-- Create the `GeocodingCache` table and constraints from the specification.
-- Implement idempotent schema initialization before the application accepts
-  requests.
-- Define `IGeocodingCacheRepository`.
-- Implement cache lookup and atomic insert/upsert using only verified
+- [x] Create the `GeocodingCache` table and constraints from the
+  specification.
+- [x] Implement idempotent schema initialization before the application
+  accepts requests.
+- [x] Define `IGeocodingCacheRepository`.
+- [x] Implement cache lookup and atomic insert/upsert using only verified
   `Formula.SimpleRepo` APIs.
-- Register the repository with the lifetime required by the package.
+- [x] Register the repository with the transient lifetime required by the
+  package.
 
 ## Deliverables
 
@@ -31,9 +51,18 @@ SQLite and verified `Formula.SimpleRepo` APIs.
 
 ## Exit Criteria
 
-- Schema initialization can run repeatedly without error.
-- Lookup returns the record for a normalized city name.
-- Upsert leaves exactly one row per normalized city name.
-- All fields, including nullable population and UTC timestamp, round-trip
+- [x] Schema initialization can run repeatedly without error.
+- [x] Lookup returns the record for a normalized city name.
+- [x] Upsert leaves exactly one row per normalized city name.
+- [x] All fields, including nullable population and UTC timestamp, round-trip
   correctly.
-- SQLite failures remain distinguishable from cache misses.
+- [x] SQLite failures remain distinguishable from cache misses.
+
+## Verification
+
+- Build: succeeded with zero warnings and zero errors.
+- Formatting: `dotnet format --verify-no-changes` succeeded.
+- Tests: 9 passed, 0 failed.
+- Repository coverage includes transient lifetime, schema idempotency,
+  round-trip mapping, atomic update uniqueness, database constraints, and
+  cache-miss versus SQLite-failure behavior.

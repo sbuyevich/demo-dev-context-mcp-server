@@ -7,9 +7,9 @@ supplies both location and population data.
 
 ## Dependencies
 
-- Stage 1 exit criteria must pass.
-- The Stage 2 repository contract must be agreed before work begins.
-- Stage 2 integration must pass before this stage can complete.
+- Stage 2 is complete.
+- Use `IGeocodingCacheRepository.GetAsync` and `UpsertAsync` with the
+  normalized city key and request cancellation token.
 
 ## Work
 
