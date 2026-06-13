@@ -36,39 +36,25 @@ implementation and test contract.
 
 The API product/service name is `City`.
 
-The solution name, root namespace, project names, directory layout, project
-references, namespace layout, and placement of production and test code must
-follow the API architecture standard in DevContext company documentation. Do
-not substitute
-generic project names such as `CityApi` or invent a Clean Architecture,
-vertical-slice, or single-project layout when the company standard is
-unavailable.
+Follow `docs://company-docs/api.architecture.md` and create:
 
-### Architecture verification gate
+| Project | Responsibility |
+| --- | --- |
+| `STI.City.API` | Minimal API endpoints, startup, DI, configuration, Serilog, and API DTOs |
+| `STI.City.Core` | Domain models, service contracts and implementations, and repository contracts |
+| `STI.City.Data` | SQLite entities, mappings, and Formula.SimpleRepo repository implementations |
+| `STI.City.Tests` | Unit, API, and repository integration tests |
 
-Before scaffolding or implementation:
+Reference direction:
 
-1. Query `docs:company-docs` for the current API architecture standard.
-2. Record the returned citation URI in this specification or the
-   implementation notes.
-3. Apply its exact solution name, project names, folder layout, dependency
-   direction, test-project naming, and namespace conventions to `City`.
-4. Stop and restore access to the company-documentation index if DevContext
-   returns `not_found`, `not_ready`, or `insufficient_evidence`.
+- `STI.City.API` references `STI.City.Core` and `STI.City.Data`.
+- `STI.City.Data` references `STI.City.Core`.
+- `STI.City.Core` has no API, Data, or database-framework dependency.
 
-At specification time, DevContext returned `insufficient_evidence` for the API
-architecture queries. The concrete project structure is therefore
-intentionally not inferred.
-
-Regardless of the company-defined project boundaries:
-
-- target production and test projects at `net10.0`;
-- use the modern `WebApplication.CreateBuilder` hosting model;
-- organize the four routes in a `/city` route group;
-- keep route handlers thin and place cache-aside behavior in an injected
-  application service; and
-- expose the web entry point to the company-defined integration test project
-  so it can use `WebApplicationFactory<Program>`.
+Use `net10.0` for all projects. Keep business logic in Core services,
+repository interfaces in Core, persistence implementations in Data, and
+endpoint handlers thin. Database entities and API DTOs remain separate and
+map through Core domain models.
 
 ## 4. Dependencies
 
@@ -100,7 +86,7 @@ registration, provider-level schema initialization, and an atomic SQLite
 resolved. See
 `design/stages/stage-0-resolve-architecture-and-package-apis/evidence.md`.
 
-The company architecture standard remains the only Stage 0 blocker.
+Stage 0 architecture and package verification is complete.
 
 The verified `Demo.Cities` contracts are:
 
@@ -391,7 +377,7 @@ cache-aside branching.
 
 ## 10. Startup and Middleware
 
-In the company-defined host project for `City`, at minimum:
+In `STI.City.API`, at minimum:
 
 1. Register Problem Details.
 2. Register package services through verified DI extensions.
@@ -409,9 +395,8 @@ names, success response types, and documented error statuses.
 ## 11. Testing Specification
 
 Use test doubles for package interfaces and an isolated SQLite database for
-each test or test collection. Integration tests in the company-defined test
-project must execute through `WebApplicationFactory<Program>` and
-`HttpClient`.
+each test or test collection. Integration tests in `STI.City.Tests` must
+execute through `WebApplicationFactory<Program>` and `HttpClient`.
 
 ### 11.1 Required tests
 
@@ -509,9 +494,10 @@ Implementation is complete when:
 - ASP.NET Core error handling:
   <https://learn.microsoft.com/aspnet/core/fundamentals/error-handling-api>
 
-DevContext still returns `insufficient_evidence` for the company API
-architecture standard. SimpleRepo's core repository APIs are indexed when
-queried for its `net8.0` package asset, which is verified compatible with the
-City API's `net10.0` target. Its SQLite dialect, transient registration,
-provider-level schema creation, and repository-contained atomic upsert
-approach are resolved in the Stage 0 evidence.
+- Company API architecture:
+  `docs://company-docs/api.architecture.md`
+- SimpleRepo's core repository APIs are indexed for its `net8.0` package
+  asset, which is verified compatible with the City API's `net10.0` target.
+  Its SQLite dialect, transient registration, provider-level schema creation,
+  and repository-contained atomic upsert approach are resolved in the Stage 0
+  evidence.

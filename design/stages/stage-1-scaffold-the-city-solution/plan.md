@@ -7,13 +7,31 @@ architecture and has the required configuration and dependency registrations.
 
 ## Dependencies
 
-- Stage 0 exit criteria must pass.
+- Stage 0 is complete.
+
+## Project Structure
+
+Create a `City` solution containing:
+
+| Project | Type | References |
+| --- | --- | --- |
+| `STI.City.API` | ASP.NET Core Minimal API | `STI.City.Core`, `STI.City.Data` |
+| `STI.City.Core` | Class library | None |
+| `STI.City.Data` | Class library | `STI.City.Core` |
+| `STI.City.Tests` | Test project | `STI.City.API`, `STI.City.Core`, `STI.City.Data` |
+
+Use matching root namespaces for each project. Keep domain models, service
+interfaces and implementations, and repository interfaces in Core. Keep
+SQLite entities, mappings, and SimpleRepo repository implementations in Data.
+Keep endpoint DTOs, startup, configuration, DI registration, and Serilog in
+API.
+
+Architecture source: `docs://company-docs/api.architecture.md`.
 
 ## Work
 
-- Create the .NET 10 solution and projects using the names and structure
-  established in Stage 0.
-- Add project references following the company-defined dependency direction.
+- Create the .NET 10 `City` solution and the four `STI.City.*` projects above.
+- Add project references exactly as defined in the project structure table.
 - Configure the QA and production NuGet sources as required.
 - Add the verified package versions.
 - Add `Microsoft.Data.Sqlite` 10.0.9 and an explicit `Dapper` 2.1.35
@@ -28,7 +46,7 @@ architecture and has the required configuration and dependency registrations.
 
 ## Deliverables
 
-- Buildable `City` solution and test projects.
+- Buildable `City` solution containing all four company-standard projects.
 - Minimal host with configuration and dependency injection wiring.
 - Empty `/city` route group ready for endpoint mapping.
 

@@ -11,11 +11,9 @@ None. This stage blocks every later stage.
 
 ## Implementation Status
 
-**Blocked.** Package discovery is substantially complete, but the stage exit
-criteria have not passed:
-
-- `docs:company-docs` returns `insufficient_evidence` for the API architecture
-  standard, so the solution and project map cannot be finalized.
+**Complete.** DevContext returned the company API architecture standard at
+`docs://company-docs/api.architecture.md`, and all required package contracts
+are resolved.
 
 Formula.SimpleRepo 2.8.1 compatibility with a `net10.0` consumer has been
 verified by restore and build. Its SQLite dialect, transient registration
@@ -23,16 +21,13 @@ lifetime, schema initialization approach, and atomic upsert approach are also
 resolved and recorded in [evidence.md](evidence.md). SimpleRepo is not a
 blocker.
 
-Verified contracts and citation URIs are recorded in
-[evidence.md](evidence.md). Do not start Stage 1 until the company architecture
-blocker is resolved and this status is changed to complete.
+Verified contracts, project structure, and citation URIs are recorded in
+[evidence.md](evidence.md). Stage 1 is unblocked.
 
 ## Work
 
-- [ ] Query `docs:company-docs` for the current .NET API architecture standard
-  and receive usable evidence. Queries currently return
-  `insufficient_evidence`.
-- [ ] Record the required solution name, project names, directory structure,
+- [x] Query `docs:company-docs` for the current .NET API architecture standard.
+- [x] Record the required solution name, project names, directory structure,
   project references, namespaces, and test-project conventions.
 - [x] Verify the exact dependency-injection extension and public APIs for:
   - QA `Demo.Cities` 1.1.0;
@@ -45,9 +40,9 @@ blocker is resolved and this status is changed to complete.
 
 ## Deliverables
 
-- [ ] Documented company architecture contract.
+- [x] Documented company architecture contract.
 - [x] Documented package API and SQLite implementation contracts.
-- [ ] Final project and namespace map for the `City` API.
+- [x] Final project and namespace map for the `City` API.
 - [x] Confirmed package versions and sources.
 
 ## Exit Criteria

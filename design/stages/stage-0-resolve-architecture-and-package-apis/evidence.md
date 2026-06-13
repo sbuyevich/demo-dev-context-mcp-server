@@ -2,8 +2,8 @@
 
 ## Status
 
-Stage 0 is blocked only by missing company architecture evidence. Package and
-SQLite data-access contracts are resolved. No solution has been scaffolded.
+Stage 0 is complete. Company architecture, package contracts, and SQLite
+data-access behavior are resolved. No solution has been scaffolded.
 
 ## Confirmed Packages
 
@@ -243,26 +243,39 @@ Package-pinned source evidence:
 - Protected configured connection:
   <https://github.com/NephosIntegration/Formula.SimpleRepo/blob/fb755d98e46228555b0314e44eb69bf9c67d4791/Formula.SimpleRepo/Base/ReadOnlyRepositoryBase.cs>
 
-## Unresolved Architecture
+## Company API Architecture
 
-Queries against `docs:company-docs` for the current .NET API architecture
-standard returned `insufficient_evidence`. The following therefore remain
-unknown:
+Source: `docs://company-docs/api.architecture.md`
 
-- solution name;
-- production and test project names;
-- directory and namespace layout;
-- project dependency direction; and
-- test-project responsibilities and conventions.
+Create the solution for the `City` API with these projects:
 
-The company documentation index must be corrected or populated before Stage 0
-can complete.
+| Project | Responsibility |
+| --- | --- |
+| `STI.City.API` | Minimal API endpoints, startup, dependency injection registration, configuration, and Serilog setup |
+| `STI.City.Core` | Domain models, service contracts, service implementations, and repository contracts |
+| `STI.City.Data` | Database entities, persistence mappings, and repository implementations using Formula.SimpleRepo |
+| `STI.City.Tests` | Service unit tests and focused API and repository tests |
 
-## Required Unblocking Actions
+Dependency direction:
 
-1. Make the company API architecture document discoverable through
-   `docs:company-docs`.
-2. Re-run Stage 0 company-documentation queries and update this document with
-   the missing citation
-   URIs.
-3. Finalize the project map, then mark Stage 0 complete.
+- `STI.City.API` references `STI.City.Core` and `STI.City.Data`.
+- `STI.City.Data` references `STI.City.Core`.
+- `STI.City.Core` references neither `STI.City.API` nor
+  `STI.City.Data` and has no database-framework dependencies.
+- Minimal API handlers delegate business logic to Core services and do not
+  access repositories directly.
+
+Boundary rules:
+
+- Define interfaces for injected or replaceable services.
+- Keep business rules in Core services.
+- Define repository interfaces in Core and implement them in Data.
+- Keep database entities separate from API request and response models.
+- Map database entities to domain models at the Data boundary.
+
+Testing rules:
+
+- Unit-test Core services through service interfaces and mocked repository
+  contracts.
+- Test API routing, validation, authorization, and response mapping.
+- Add integration tests for repository queries and database mappings.
