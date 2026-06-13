@@ -1,10 +1,14 @@
-# Demo City API
+# City API
 
 ## Goal
 
 Create a .NET 10 Minimal API that exposes city lists and geocoding details.
 Use the internal NuGet packages for city data and Open-Meteo access, and cache
 external API results in SQLite.
+
+## API Architecture
+Name this API `City`.
+Use projects name and structure defined in DevContext company docs.
 
 ## Endpoints
 
@@ -44,7 +48,7 @@ Store at least the normalized city name, display name, country, latitude,
 longitude, population, and retrieval timestamp. Enforce one cache record per
 normalized city name.
 
-Use `SimpleRepo` for SQLite data access. Verify its public API through
+Use `Formula.SimpleRepo` for SQLite data access. Verify its public API through
 DevContext before implementation; do not infer unavailable package APIs.
 
 ## Dependencies
