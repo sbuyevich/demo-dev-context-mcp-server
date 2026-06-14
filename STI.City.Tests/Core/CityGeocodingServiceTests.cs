@@ -11,83 +11,143 @@ public sealed class CityGeocodingServiceTests
     private static readonly DateTimeOffset Now =
         new(2026, 6, 14, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly Mock<ICityService> _cities = new(MockBehavior.Strict);
-    private readonly Mock<IOpenMeteoClient> _client =
+    private readonly Mock<ICityService> _cityService =
         new(MockBehavior.Strict);
-    private readonly Mock<IGeocodingCacheRepository> _repository =
+    private readonly Mock<IOpenMeteoClient> _openMeteoClient =
+        new(MockBehavior.Strict);
+    private readonly Mock<IGeocodingCacheRepository> _cacheRepository =
         new(MockBehavior.Strict);
     private readonly Mock<TimeProvider> _timeProvider =
         new(MockBehavior.Strict);
-    private readonly Mock<ILogger<CityGeocodingService>> _logger = new();
+    private readonly Mock<ILogger<CityGeocodingService>> _logger =
+        new(MockBehavior.Strict);
+    private readonly CityGeocodingService _target;
 
-    [Fact]
-    public async Task UnknownCityDoesNotUseCacheOrUpstream()
+    public CityGeocodingServiceTests()
     {
-        _cities.Setup(service => service.GetCityNames())
-            .Returns(["London", "New York"]);
-        var service = CreateService();
-
-        var outcome = await service.GetAsync("missing");
-
-        Assert.Equal(
-            CityGeocodingOutcomeKind.CityNotFound,
-            outcome.Kind);
-        _repository.VerifyNoOtherCalls();
-        _client.VerifyNoOtherCalls();
+        _target = new CityGeocodingService(
+            _cityService.Object,
+            _openMeteoClient.Object,
+            _cacheRepository.Object,
+            _timeProvider.Object,
+            _logger.Object);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task BlankCityDoesNotUseCollaborators(string cityName)
+    public async Task GetAsync_BlankCity_ReturnsCityNotFound(
+        string cityName)
     {
-        var service = CreateService();
+        // Purpose: Blank route values must be rejected before dependencies are used.
+        // arrange
 
-        var outcome = await service.GetAsync(cityName);
+        // act
+        var actual = await _target.GetAsync(cityName);
 
+        // assert
         Assert.Equal(
             CityGeocodingOutcomeKind.CityNotFound,
-            outcome.Kind);
-        _cities.VerifyNoOtherCalls();
-        _repository.VerifyNoOtherCalls();
-        _client.VerifyNoOtherCalls();
+            actual.Kind);
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task CacheHitUsesCanonicalNormalizedName()
+    public async Task GetAsync_UnrecognizedCity_ReturnsCityNotFound()
     {
-        var token = new CancellationTokenSource().Token;
-        var record = CreateRecord();
-        _cities.Setup(service => service.GetCityNames())
-            .Returns(["New York"]);
-        _repository.Setup(repository =>
-                repository.GetAsync("NEW YORK", token))
-            .ReturnsAsync(record);
-        var service = CreateService();
+        // Purpose: Unsupported cities must not access cache or upstream services.
+        // arrange
+        _cityService.Setup(service => service.GetCityNames())
+            .Returns(["London", "New York"]);
 
-        var outcome = await service.GetAsync("  nEw YoRk  ", token);
+        // act
+        var actual = await _target.GetAsync("missing");
 
-        Assert.Equal(CityGeocodingOutcomeKind.Success, outcome.Kind);
-        Assert.Same(record, outcome.Record);
-        _client.VerifyNoOtherCalls();
-        _repository.VerifyAll();
+        // assert
+        Assert.Equal(
+            CityGeocodingOutcomeKind.CityNotFound,
+            actual.Kind);
+        _cityService.Verify(
+            service => service.GetCityNames(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.GetAsync(
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _openMeteoClient.Verify(
+            client => client.SearchLocationsAsync(
+                It.IsAny<string>(),
+                It.IsAny<int?>(),
+                It.IsAny<string>(),
+                It.IsAny<Format?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task CacheMissSelectsFirstExactMatchAndPersists()
+    public async Task GetAsync_CacheHit_ReturnsCanonicalCachedRecord()
     {
-        var token = new CancellationTokenSource().Token;
-        _cities.Setup(service => service.GetCityNames())
+        // Purpose: A canonical cache hit must bypass Open-Meteo and preserve cancellation.
+        // arrange
+        var cancellationToken = new CancellationTokenSource().Token;
+        var expected = CreateRecord();
+        _cityService.Setup(service => service.GetCityNames())
             .Returns(["New York"]);
-        _repository.Setup(repository =>
-                repository.GetAsync("NEW YORK", token))
+        _cacheRepository.Setup(repository =>
+                repository.GetAsync("NEW YORK", cancellationToken))
+            .ReturnsAsync(expected);
+
+        // act
+        var actual = await _target.GetAsync(
+            "  nEw YoRk  ",
+            cancellationToken);
+
+        // assert
+        Assert.Equal(CityGeocodingOutcomeKind.Success, actual.Kind);
+        Assert.Same(expected, actual.Record);
+        _cityService.Verify(
+            service => service.GetCityNames(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.GetAsync(
+                "NEW YORK",
+                cancellationToken),
+            Times.Once);
+        _openMeteoClient.Verify(
+            client => client.SearchLocationsAsync(
+                It.IsAny<string>(),
+                It.IsAny<int?>(),
+                It.IsAny<string>(),
+                It.IsAny<Format?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _cacheRepository.Verify(
+            repository => repository.UpsertAsync(
+                It.IsAny<GeocodingCacheRecord>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetAsync_CacheMissWithExactMatch_PersistsFirstMatch()
+    {
+        // Purpose: A miss must select the first exact upstream match and persist it.
+        // arrange
+        var cancellationToken = new CancellationTokenSource().Token;
+        _cityService.Setup(service => service.GetCityNames())
+            .Returns(["New York"]);
+        _cacheRepository.Setup(repository =>
+                repository.GetAsync("NEW YORK", cancellationToken))
             .ReturnsAsync((GeocodingCacheRecord?)null);
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                token))
+                cancellationToken))
             .ReturnsAsync(
                 Response(
                     Location("New York City", 1),
@@ -95,176 +155,347 @@ public sealed class CityGeocodingServiceTests
                     Location("New York", 3)));
         _timeProvider.Setup(provider => provider.GetUtcNow())
             .Returns(Now);
-        GeocodingCacheRecord? persisted = null;
-        _repository.Setup(repository => repository.UpsertAsync(
-                It.IsAny<GeocodingCacheRecord>(),
-                token))
-            .Callback<GeocodingCacheRecord, CancellationToken>(
-                (record, _) => persisted = record)
+        _cacheRepository.Setup(repository => repository.UpsertAsync(
+                It.Is<GeocodingCacheRecord>(record =>
+                    record.NormalizedCityName == "NEW YORK"
+                    && record.DisplayName == "New York"
+                    && record.Country == "United States"
+                    && record.Latitude == 40.7128
+                    && record.Longitude == -74.006
+                    && record.Population == 2
+                    && record.RetrievedAtUtc == Now),
+                cancellationToken))
             .Returns(Task.CompletedTask);
-        var service = CreateService();
 
-        var outcome = await service.GetAsync("new york", token);
+        // act
+        var actual = await _target.GetAsync(
+            "new york",
+            cancellationToken);
 
-        Assert.Equal(CityGeocodingOutcomeKind.Success, outcome.Kind);
-        Assert.Equal(2, outcome.Record!.Population);
-        Assert.Equal("New York", outcome.Record.DisplayName);
-        Assert.Equal("NEW YORK", outcome.Record.NormalizedCityName);
-        Assert.Equal(Now, outcome.Record.RetrievedAtUtc);
-        Assert.Equal(outcome.Record, persisted);
-        _client.VerifyAll();
-        _repository.VerifyAll();
-    }
-
-    [Fact]
-    public async Task NoExactUpstreamMatchReturnsNotFound()
-    {
-        SetupCacheMiss();
-        _client.Setup(client => client.SearchLocationsAsync(
+        // assert
+        Assert.Equal(CityGeocodingOutcomeKind.Success, actual.Kind);
+        Assert.Equal("NEW YORK", actual.Record!.NormalizedCityName);
+        Assert.Equal("New York", actual.Record.DisplayName);
+        Assert.Equal(2, actual.Record.Population);
+        Assert.Equal(Now, actual.Record.RetrievedAtUtc);
+        _cityService.Verify(
+            service => service.GetCityNames(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.GetAsync(
+                "NEW YORK",
+                cancellationToken),
+            Times.Once);
+        _openMeteoClient.Verify(
+            client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                It.IsAny<CancellationToken>()))
+                cancellationToken),
+            Times.Once);
+        _timeProvider.Verify(
+            provider => provider.GetUtcNow(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.UpsertAsync(
+                It.Is<GeocodingCacheRecord>(record =>
+                    record.Population == 2),
+                cancellationToken),
+            Times.Once);
+        VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetAsync_NoExactUpstreamMatch_ReturnsGeocodingNotFound()
+    {
+        // Purpose: Similar upstream names must not be accepted as exact city matches.
+        // arrange
+        SetupCacheMiss();
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
+                "New York",
+                null,
+                "en",
+                null,
+                CancellationToken.None))
             .ReturnsAsync(Response(Location("New York City", 1)));
-        var service = CreateService();
 
-        var outcome = await service.GetAsync("New York");
+        // act
+        var actual = await _target.GetAsync("New York");
 
+        // assert
         Assert.Equal(
             CityGeocodingOutcomeKind.GeocodingNotFound,
-            outcome.Kind);
-        _repository.Verify(
+            actual.Kind);
+        VerifyCacheMissCalls(CancellationToken.None);
+        _openMeteoClient.Verify(
+            client => client.SearchLocationsAsync(
+                "New York",
+                null,
+                "en",
+                null,
+                CancellationToken.None),
+            Times.Once);
+        _cacheRepository.Verify(
             repository => repository.UpsertAsync(
                 It.IsAny<GeocodingCacheRecord>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task UpstreamFailureReturnsServiceUnavailable()
+    public async Task GetAsync_TransportFailure_ReturnsServiceUnavailable()
     {
+        // Purpose: Transport failures on cache misses must become unavailable outcomes.
+        // arrange
+        var expectedException =
+            new HttpRequestException("unavailable");
         SetupCacheMiss();
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("unavailable"));
-        var service = CreateService();
+                CancellationToken.None))
+            .ThrowsAsync(expectedException);
+        SetupWarningLog(
+            expectedException,
+            "Open-Meteo transport failed for city New York");
 
-        var outcome = await service.GetAsync("New York");
+        // act
+        var actual = await _target.GetAsync("New York");
 
+        // assert
         Assert.Equal(
             CityGeocodingOutcomeKind.ServiceUnavailable,
-            outcome.Kind);
+            actual.Kind);
+        VerifyCacheMissCalls(CancellationToken.None);
+        VerifyUpstreamCall(CancellationToken.None);
+        VerifyWarningLog(
+            expectedException,
+            "Open-Meteo transport failed for city New York");
+        VerifyNoUpsert();
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task ApiFailureReturnsServiceUnavailable()
+    public async Task GetAsync_ApiFailure_ReturnsServiceUnavailable()
     {
+        // Purpose: Generated API failures must become unavailable outcomes and be logged.
+        // arrange
+        var expectedException = new ApiException(
+            "bad gateway",
+            502,
+            "upstream body",
+            new Dictionary<string, IEnumerable<string>>(),
+            new InvalidOperationException());
         SetupCacheMiss();
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                It.IsAny<CancellationToken>()))
-            .ThrowsAsync(
-                new ApiException(
-                    "bad gateway",
-                    502,
-                    "upstream body",
-                    new Dictionary<string, IEnumerable<string>>(),
-                    new InvalidOperationException()));
-        var service = CreateService();
+                CancellationToken.None))
+            .ThrowsAsync(expectedException);
+        SetupWarningLog(
+            expectedException,
+            "Open-Meteo returned an error for city New York");
 
-        var outcome = await service.GetAsync("New York");
+        // act
+        var actual = await _target.GetAsync("New York");
 
+        // assert
         Assert.Equal(
             CityGeocodingOutcomeKind.ServiceUnavailable,
-            outcome.Kind);
+            actual.Kind);
+        VerifyCacheMissCalls(CancellationToken.None);
+        VerifyUpstreamCall(CancellationToken.None);
+        VerifyWarningLog(
+            expectedException,
+            "Open-Meteo returned an error for city New York");
+        VerifyNoUpsert();
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task TimeoutReturnsServiceUnavailable()
+    public async Task GetAsync_TimeoutFailure_ReturnsServiceUnavailable()
     {
+        // Purpose: Explicit upstream timeouts must become unavailable outcomes and be logged.
+        // arrange
+        var expectedException = new TimeoutException();
         SetupCacheMiss();
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TimeoutException());
-        var service = CreateService();
+                CancellationToken.None))
+            .ThrowsAsync(expectedException);
+        SetupWarningLog(
+            expectedException,
+            "Open-Meteo timed out for city New York");
 
-        var outcome = await service.GetAsync("New York");
+        // act
+        var actual = await _target.GetAsync("New York");
 
+        // assert
         Assert.Equal(
             CityGeocodingOutcomeKind.ServiceUnavailable,
-            outcome.Kind);
+            actual.Kind);
+        VerifyCacheMissCalls(CancellationToken.None);
+        VerifyUpstreamCall(CancellationToken.None);
+        VerifyWarningLog(
+            expectedException,
+            "Open-Meteo timed out for city New York");
+        VerifyNoUpsert();
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task RequestCancellationPropagates()
+    public async Task GetAsync_RequestCancellation_PropagatesCancellation()
     {
-        var source = new CancellationTokenSource();
+        // Purpose: Caller cancellation must propagate without being translated or logged.
+        // arrange
+        using var source = new CancellationTokenSource();
         SetupCacheMiss(source.Token);
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
                 source.Token))
             .ThrowsAsync(new OperationCanceledException(source.Token));
-        var service = CreateService();
         source.Cancel();
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            () => service.GetAsync("New York", source.Token));
+        // act
+        var actual = await Assert.ThrowsAsync<OperationCanceledException>(
+            () => _target.GetAsync("New York", source.Token));
+
+        // assert
+        Assert.Equal(source.Token, actual.CancellationToken);
+        VerifyCacheMissCalls(source.Token);
+        VerifyUpstreamCall(source.Token);
+        VerifyNoUpsert();
+        VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task PersistenceFailurePropagates()
+    public async Task GetAsync_PersistenceFailure_PropagatesFailure()
     {
+        // Purpose: Cache persistence failures must remain internal failures for the API layer.
+        // arrange
+        var expectedException =
+            new InvalidOperationException("database");
         SetupCacheMiss();
-        _client.Setup(client => client.SearchLocationsAsync(
+        _openMeteoClient.Setup(client => client.SearchLocationsAsync(
                 "New York",
                 null,
                 "en",
                 null,
-                It.IsAny<CancellationToken>()))
+                CancellationToken.None))
             .ReturnsAsync(Response(Location("New York", 1)));
         _timeProvider.Setup(provider => provider.GetUtcNow())
             .Returns(Now);
-        _repository.Setup(repository => repository.UpsertAsync(
-                It.IsAny<GeocodingCacheRecord>(),
-                It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("database"));
-        var service = CreateService();
+        _cacheRepository.Setup(repository => repository.UpsertAsync(
+                It.Is<GeocodingCacheRecord>(record =>
+                    record.NormalizedCityName == "NEW YORK"
+                    && record.Population == 1),
+                CancellationToken.None))
+            .ThrowsAsync(expectedException);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.GetAsync("New York"));
+        // act
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _target.GetAsync("New York"));
+
+        // assert
+        Assert.Same(expectedException, actual);
+        VerifyCacheMissCalls(CancellationToken.None);
+        VerifyUpstreamCall(CancellationToken.None);
+        _timeProvider.Verify(
+            provider => provider.GetUtcNow(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.UpsertAsync(
+                It.Is<GeocodingCacheRecord>(record =>
+                    record.NormalizedCityName == "NEW YORK"
+                    && record.Population == 1),
+                CancellationToken.None),
+            Times.Once);
+        VerifyNoOtherCalls();
     }
-
-    private CityGeocodingService CreateService() =>
-        new(
-            _cities.Object,
-            _client.Object,
-            _repository.Object,
-            _timeProvider.Object,
-            _logger.Object);
 
     private void SetupCacheMiss(
         CancellationToken cancellationToken = default)
     {
-        _cities.Setup(service => service.GetCityNames())
+        _cityService.Setup(service => service.GetCityNames())
             .Returns(["New York"]);
-        _repository.Setup(repository =>
+        _cacheRepository.Setup(repository =>
                 repository.GetAsync("NEW YORK", cancellationToken))
             .ReturnsAsync((GeocodingCacheRecord?)null);
+    }
+
+    private void VerifyCacheMissCalls(
+        CancellationToken cancellationToken)
+    {
+        _cityService.Verify(
+            service => service.GetCityNames(),
+            Times.Once);
+        _cacheRepository.Verify(
+            repository => repository.GetAsync(
+                "NEW YORK",
+                cancellationToken),
+            Times.Once);
+    }
+
+    private void VerifyUpstreamCall(
+        CancellationToken cancellationToken) =>
+        _openMeteoClient.Verify(
+            client => client.SearchLocationsAsync(
+                "New York",
+                null,
+                "en",
+                null,
+                cancellationToken),
+            Times.Once);
+
+    private void VerifyNoUpsert() =>
+        _cacheRepository.Verify(
+            repository => repository.UpsertAsync(
+                It.IsAny<GeocodingCacheRecord>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+
+    private void SetupWarningLog(
+        Exception exception,
+        string message) =>
+        _logger.Setup(logger => logger.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>(
+                    (value, _) => value.ToString() == message),
+                exception,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()));
+
+    private void VerifyWarningLog(
+        Exception exception,
+        string message) =>
+        _logger.Verify(logger => logger.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>(
+                    (value, _) => value.ToString() == message),
+                exception,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+
+    private void VerifyNoOtherCalls()
+    {
+        _cityService.VerifyNoOtherCalls();
+        _openMeteoClient.VerifyNoOtherCalls();
+        _cacheRepository.VerifyNoOtherCalls();
+        _timeProvider.VerifyNoOtherCalls();
+        _logger.VerifyNoOtherCalls();
     }
 
     private static GeocodingCacheRecord CreateRecord() =>
