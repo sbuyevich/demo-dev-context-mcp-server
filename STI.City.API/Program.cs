@@ -1,6 +1,9 @@
 using Demo.Cities;
 using OpenMeteo.Api.Client;
 using Serilog;
+using STI.City.API.Endpoints;
+using STI.City.API.Errors;
+using STI.City.Core;
 using STI.City.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,9 +24,11 @@ builder.Host.UseSerilog((context, configuration) =>
         .WriteTo.Console());
 
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<SanitizedExceptionHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDemoCities();
 builder.Services.AddOpenMeteoApiClient();
+builder.Services.AddCityCore();
 builder.Services.AddCityData();
 
 var app = builder.Build();
@@ -32,12 +37,8 @@ await app.Services
     .GetRequiredService<IGeocodingCacheInitializer>()
     .InitializeAsync();
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler();
-}
-
-app.MapGroup("/city");
+app.UseExceptionHandler();
+app.MapCityEndpoints();
 
 app.Run();
 
